@@ -26,7 +26,7 @@ function Stat({
 }
 
 export function ReportView({ data }: { data: AuditResponse }) {
-  const { report, ai } = data
+  const { report, ai, source } = data
 
   return (
     <div className="flex flex-col gap-8">
@@ -81,7 +81,7 @@ export function ReportView({ data }: { data: AuditResponse }) {
           <h2 id="ai-title" className="sr-only">
             Suggestions générées par IA
           </h2>
-          <AiPanel ai={ai} />
+          <AiPanel ai={ai} source={source} />
         </section>
       </div>
     </div>

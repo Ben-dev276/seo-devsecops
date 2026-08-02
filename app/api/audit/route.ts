@@ -1,6 +1,7 @@
 import { generateObject } from "ai"
 import { z } from "zod"
-import { analyze } from "@/lib/seo"
+import { analyze, buildHeuristicResult } from "@/lib/seo"
+import type { SuggestionSource } from "@/lib/types"
 
 // On laisse un peu de marge, l'analyse + l'appel IA peuvent prendre du temps.
 export const maxDuration = 60
@@ -53,9 +54,11 @@ export async function POST(req: Request) {
     )
   }
 
-  // 2) Suggestions IA. Si ca plante (quota, réseau...), on renvoie quand meme
-  // l'analyse technique : mieux vaut un rapport partiel qu'une page d'erreur.
-  let ai = null
+  // 2) Suggestions IA. Si ca plante (pas de carte sur l'AI Gateway, quota,
+  // réseau...), on bascule sur des suggestions générées côté code. L'utilisateur
+  // a donc toujours un rapport exploitable, jamais une page d'erreur.
+  let ai
+  let source: SuggestionSource = "ia"
   try {
     const { object } = await generateObject({
       model: "openai/gpt-4.1-mini",
@@ -67,10 +70,12 @@ export async function POST(req: Request) {
     })
     ai = object
   } catch (err) {
-    console.log("[v0] Erreur IA:", err instanceof Error ? err.message : err)
+    console.log("[v0] IA indisponible, fallback heuristique:", err instanceof Error ? err.message : err)
+    ai = buildHeuristicResult(report)
+    source = "heuristique"
   }
 
-  return Response.json({ report, ai })
+  return Response.json({ report, ai, source })
 }
 
 // On résume le rapport technique pour l'IA, en gardant l'essentiel.

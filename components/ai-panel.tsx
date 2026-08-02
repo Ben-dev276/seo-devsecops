@@ -1,5 +1,5 @@
-import { Sparkles, Tag, ArrowUpRight } from "lucide-react"
-import type { AiResult } from "@/lib/types"
+import { Sparkles, Tag, ArrowUpRight, Cpu } from "lucide-react"
+import type { AiResult, SuggestionSource } from "@/lib/types"
 
 const priorityStyle = {
   haute: "bg-destructive/10 text-destructive",
@@ -7,30 +7,35 @@ const priorityStyle = {
   basse: "bg-muted text-muted-foreground",
 } as const
 
-export function AiPanel({ ai }: { ai: AiResult | null }) {
-  // Si l'appel IA a échoué on prévient l'utilisateur, sans casser le reste.
-  if (!ai) {
-    return (
-      <div className="rounded-xl border border-border bg-card p-6">
-        <div className="mb-2 flex items-center gap-2 text-muted-foreground">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          <h2 className="text-sm font-semibold uppercase tracking-wide">Suggestions IA</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Les recommandations IA n&apos;ont pas pu être générées cette fois-ci. L&apos;analyse technique
-          ci-dessus reste valable.
-        </p>
-      </div>
-    )
-  }
+export function AiPanel({ ai, source }: { ai: AiResult | null; source: SuggestionSource }) {
+  // En théorie ai n'est jamais null (la route renvoie toujours un fallback),
+  // mais on garde une garde de sécurité pour le typage.
+  if (!ai) return null
+
+  const isAi = source === "ia"
 
   return (
     <div className="flex flex-col gap-6">
       {/* Résumé */}
-      <div className="rounded-xl border border-primary/30 bg-primary/5 p-6">
-        <div className="mb-2 flex items-center gap-2 text-primary">
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          <h2 className="text-sm font-semibold uppercase tracking-wide">Analyse IA</h2>
+      <div
+        className={`rounded-xl border p-6 ${
+          isAi ? "border-primary/30 bg-primary/5" : "border-border bg-card"
+        }`}
+      >
+        <div className={`mb-2 flex items-center gap-2 ${isAi ? "text-primary" : "text-muted-foreground"}`}>
+          {isAi ? (
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Cpu className="h-4 w-4" aria-hidden="true" />
+          )}
+          <h2 className="text-sm font-semibold uppercase tracking-wide">
+            {isAi ? "Analyse IA" : "Analyse automatique"}
+          </h2>
+          {!isAi && (
+            <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              sans IA
+            </span>
+          )}
         </div>
         <p className="text-pretty leading-relaxed">{ai.summary}</p>
       </div>

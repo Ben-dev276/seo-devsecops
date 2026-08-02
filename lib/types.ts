@@ -7,10 +7,14 @@ export type AiResult = {
   suggestions: { title: string; detail: string; priority: "haute" | "moyenne" | "basse" }[]
 }
 
+// D'où viennent les suggestions : vrai modèle IA ou fallback code.
+export type SuggestionSource = "ia" | "heuristique"
+
 // Réponse complète de /api/audit
 export type AuditResponse = {
   report: SeoReport
   ai: AiResult | null
+  source: SuggestionSource
 }
 
 export type { SeoReport }

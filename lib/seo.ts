@@ -307,3 +307,138 @@ export async function analyze(inputUrl: string): Promise<SeoReport> {
     checks,
   }
 }
+
+// --- Fallback sans IA ---
+// Si l'AI Gateway n'est pas dispo (pas de carte, quota...), on génère quand meme
+// des suggestions utiles à partir de ce qu'on a détecté. C'est plus basique que
+// l'IA mais ca reste actionnable, et l'app ne renvoie jamais une coquille vide.
+
+type Suggestion = { title: string; detail: string; priority: "haute" | "moyenne" | "basse" }
+type Keyword = { keyword: string; reason: string }
+
+// On mappe chaque check en échec/warning vers un conseil concret.
+const FIX_HINTS: Record<string, Suggestion> = {
+  title: {
+    title: "Retravailler la balise <title>",
+    detail: "Vise 30 à 60 caractères, avec le mot-clé principal placé en début de titre.",
+    priority: "haute",
+  },
+  description: {
+    title: "Ajouter/allonger la meta description",
+    detail: "Rédige une description de 70 à 160 caractères qui donne envie de cliquer.",
+    priority: "haute",
+  },
+  h1: {
+    title: "Corriger la hiérarchie H1",
+    detail: "Garde un seul H1 par page, qui résume clairement le sujet principal.",
+    priority: "moyenne",
+  },
+  headings: {
+    title: "Structurer le contenu avec des H2/H3",
+    detail: "Découpe le texte en sections avec des sous-titres pour aider le crawl et la lecture.",
+    priority: "moyenne",
+  },
+  alt: {
+    title: "Compléter les attributs alt",
+    detail: "Décris chaque image importante : c'est bon pour le SEO image et l'accessibilité.",
+    priority: "moyenne",
+  },
+  https: {
+    title: "Passer le site en HTTPS",
+    detail: "Le HTTPS est un facteur de classement et rassure les visiteurs.",
+    priority: "haute",
+  },
+  viewport: {
+    title: "Déclarer une balise viewport",
+    detail: "Ajoute <meta name=\"viewport\"> pour un rendu mobile correct (mobile-first).",
+    priority: "haute",
+  },
+  lang: {
+    title: "Renseigner l'attribut lang",
+    detail: "Indique la langue sur la balise <html> (ex: lang=\"fr\").",
+    priority: "basse",
+  },
+  canonical: {
+    title: "Déclarer une URL canonique",
+    detail: "Ajoute un <link rel=\"canonical\"> pour éviter le contenu dupliqué.",
+    priority: "basse",
+  },
+  og: {
+    title: "Compléter les balises Open Graph",
+    detail: "Renseigne og:title et og:image pour de beaux aperçus sur les réseaux sociaux.",
+    priority: "basse",
+  },
+  content: {
+    title: "Enrichir le contenu",
+    detail: "Vise au moins 300 mots pertinents pour que la page soit jugée utile.",
+    priority: "moyenne",
+  },
+  speed: {
+    title: "Améliorer le temps de réponse",
+    detail: "Optimise le TTFB (cache, hébergement, images) pour un chargement plus rapide.",
+    priority: "moyenne",
+  },
+}
+
+const PRIORITY_ORDER = { haute: 0, moyenne: 1, basse: 2 } as const
+
+// Génère un "AiResult" de secours à partir du rapport technique.
+export function buildHeuristicResult(report: SeoReport): {
+  summary: string
+  keywords: Keyword[]
+  suggestions: Suggestion[]
+} {
+  // Suggestions : on prend tous les checks qui ne sont pas OK.
+  const suggestions = report.checks
+    .filter((c) => c.status !== "ok" && FIX_HINTS[c.id])
+    .map((c) => FIX_HINTS[c.id])
+    .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
+
+  if (suggestions.length === 0) {
+    suggestions.push({
+      title: "Continuer le suivi",
+      detail: "Les fondamentaux techniques sont bons. Surveille le contenu et les backlinks.",
+      priority: "basse",
+    })
+  }
+
+  // Mots-clés : approche simple mais honnête. On extrait les mots les plus
+  // fréquents du contenu (hors mots vides) comme point de départ.
+  const keywords = topWords(report.textSample, report.meta.title).map((w) => ({
+    keyword: w,
+    reason: "Terme récurrent dans le contenu de la page, à confirmer avec un outil de volume de recherche.",
+  }))
+
+  const failCount = report.checks.filter((c) => c.status === "fail").length
+  const summary =
+    `Score technique de ${report.score}/100. ` +
+    (failCount > 0
+      ? `${failCount} point(s) bloquant(s) à corriger en priorité. `
+      : "Aucun point bloquant détecté. ") +
+    "Suggestions générées à partir de l'analyse technique (IA indisponible)."
+
+  return { summary, keywords, suggestions }
+}
+
+// Liste de mots vides français/anglais courants à ignorer.
+const STOP_WORDS = new Set([
+  "le", "la", "les", "un", "une", "des", "de", "du", "et", "ou", "à", "au", "aux", "en", "dans",
+  "pour", "par", "sur", "avec", "sans", "ce", "cette", "ces", "que", "qui", "quoi", "dont", "où",
+  "est", "sont", "être", "avoir", "plus", "moins", "vous", "nous", "ils", "elles", "son", "sa",
+  "ses", "leur", "leurs", "the", "and", "for", "you", "your", "are", "with", "this", "that", "from",
+  "our", "not", "all", "can", "has", "have", "was", "will", "more", "una", "los", "com", "www",
+])
+
+function topWords(text: string, title: string | null): string[] {
+  const source = `${title ?? ""} ${text}`.toLowerCase()
+  const words = source.match(/[a-zàâäéèêëîïôöùûüç]{4,}/gi) ?? []
+  const counts = new Map<string, number>()
+  for (const w of words) {
+    if (STOP_WORDS.has(w)) continue
+    counts.set(w, (counts.get(w) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([w]) => w)
+}
